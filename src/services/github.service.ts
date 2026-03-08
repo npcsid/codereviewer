@@ -19,6 +19,8 @@ export async function createGitHubApp() {
   const { data } = await githubApp.octokit.request('/app');
   console.log(`GitHub App authenticated as '${data.name}'`);
 
+  console.log('Data: ', data)
+
   githubApp.webhooks.on('installation.created', ({ payload }) => {
     const { installation, sender } = payload;
     const account = installation.account;
