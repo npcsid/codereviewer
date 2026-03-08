@@ -100,6 +100,7 @@ export async function createGitHubApp() {
   });
 
   githubApp.webhooks.onAny(({ id, name, payload }) => {
+    console.log('Webhook on any')
     const action = typeof payload === 'object' && payload && 'action' in payload
       ? (payload as { action?: string }).action
       : undefined;
