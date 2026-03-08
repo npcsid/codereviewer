@@ -75,6 +75,40 @@ export async function createGitHubApp() {
 
   });
 
+  githubApp.webhooks.on('pull_request.edited', async ({ octokit, payload }) => {
+    const { pull_request, repository } = payload;
+    const owner = repository.owner.login;
+    const repo = repository.name;
+    const prNumber = pull_request.number;
+
+    console.log(
+      `PR #${prNumber} opened on ${owner}/${repo} by ${pull_request.user.login}`,
+    );
+
+    const { data: files } = await octokit.request(
+      'GET /repos/{owner}/{repo}/pulls/{pull_number}/files',
+      { owner, repo, pull_number: prNumber },
+    );
+
+    console.log(
+      `Changed files (${files.length}):`,
+      files.map((f: { filename: string }) => f.filename),
+    );
+
+  });
+
+  githubApp.webhooks.onAny(({ id, name, payload }) => {
+    const action = typeof payload === 'object' && payload && 'action' in payload
+      ? (payload as { action?: string }).action
+      : undefined;
+
+    console.log(`[webhook] id=${id} name=${name} action=${action ?? 'n/a'}`);
+  });
+
+  githubApp.webhooks.on('pull_request', ({ payload }) => {
+    console.log(`[pull_request] action=${payload.action} #${payload.pull_request.number}`);
+  });
+
   githubApp.webhooks.onError((error) => {
     if (error.name === 'AggregateError') {
       console.error(`Error processing request: ${error.event}`);
