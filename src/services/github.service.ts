@@ -17,7 +17,7 @@ export async function createGitHubApp() {
   });
 
   const { data } = await githubApp.octokit.request('/app');
-  // console.log(`GitHub App authenticated as '${data.name}'`);
+  console.log(`GitHub App authenticated as '${data.name}'`);
 
   githubApp.webhooks.on('installation.created', ({ payload }) => {
     const { installation, sender } = payload;
@@ -28,6 +28,11 @@ export async function createGitHubApp() {
       `App installed by ${sender.login} (installation ${installation.id}) ` +
       `on ${accountName}`,
     );
+  });
+
+   githubApp.webhooks.on('pull_request', ({ payload }) => {
+    githubApp.log.debug('Confirming webhook event')
+    console.log(`[pull_request] action=${payload.action} #${payload.pull_request.number}`);
   });
 
   githubApp.webhooks.on('pull_request.opened', async ({ octokit, payload }) => {
@@ -105,9 +110,7 @@ export async function createGitHubApp() {
     console.log(`[webhook] id=${id} name=${name} action=${action ?? 'n/a'}`);
   });
 
-  githubApp.webhooks.on('pull_request', ({ payload }) => {
-    console.log(`[pull_request] action=${payload.action} #${payload.pull_request.number}`);
-  });
+ 
   githubApp.webhooks.on('pull_request.synchronize', ({ payload }) => {
     console.log('List on pull request')
     console.log(`[pull_request] action=${payload.action} #${payload.pull_request.number}`);
