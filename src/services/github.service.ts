@@ -82,48 +82,53 @@ export async function createGitHubApp() {
   });
 
   githubApp.webhooks.on('pull_request', ({ payload }) => {
+    console.log('Generic top level PR webhook')
     console.log(
       `[pull_request] action=${payload.action} #${payload.pull_request.number}`,
     );
   });
 
   githubApp.webhooks.on('push', ({ payload }) => {
+    console.log('PR push webhook')
     console.log(
       `[push] ${payload.repository.full_name} by ${payload.pusher.name}`,
     );
   });
 
   githubApp.webhooks.on('pull_request.synchronize', ({ payload }) => {
+    console.log('PR synchronize webhook')
     console.log(
       `[pull_request] action=${payload.action} #${payload.pull_request.number}`,
     );
   });
 
   githubApp.webhooks.on('pull_request.edited', ({ payload }) => {
+    console.log('PR edited webhook')
     console.log(`[pull_request] action=${payload.action} #${payload.pull_request.number}`);
   });
 
   githubApp.webhooks.on('pull_request.opened', ({ octokit, payload }) => {
     const { pull_request, repository } = payload;
+    console.log('PR opened webhook')
     console.log(
       `PR #${pull_request.number} opened on ${repository.owner.login}/${repository.name} by ${pull_request.user.login}`,
     );
 
     // Run heavy work in the background so webhook acknowledgement is fast.
-    void runPullRequestAnalysis(
-      octokit as {
-        request: (
-          route: string,
-          params: Record<string, unknown>,
-        ) => Promise<{ data: Array<{ filename: string; patch?: string }> }>;
-      },
-      payload as PullRequestPayload,
-    ).catch((error: unknown) => {
-      console.error(
-        `[analysis:error] pr=${payload.pull_request.number}`,
-        error,
-      );
-    });
+    // void runPullRequestAnalysis(
+    //   octokit as {
+    //     request: (
+    //       route: string,
+    //       params: Record<string, unknown>,
+    //     ) => Promise<{ data: Array<{ filename: string; patch?: string }> }>;
+    //   },
+    //   payload as PullRequestPayload,
+    // ).catch((error: unknown) => {
+    //   console.error(
+    //     `[analysis:error] pr=${payload.pull_request.number}`,
+    //     error,
+    //   );
+    // });
   });
 
   githubApp.webhooks.onAny(({ id, name, payload }) => {
