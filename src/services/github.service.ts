@@ -115,6 +115,8 @@ export async function createGitHubApp() {
       `PR #${pull_request.number} opened on ${repository.owner.login}/${repository.name} by ${pull_request.user.login}`,
     );
 
+    console.log('random console for diff')
+
     // Run heavy work in the background so webhook acknowledgement is fast.
     // void runPullRequestAnalysis(
     //   octokit as {
