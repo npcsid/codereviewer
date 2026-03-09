@@ -69,7 +69,6 @@ export async function createGitHubApp() {
 
   const { data } = await githubApp.octokit.request('/app');
   console.log(`GitHub App authenticated as '${data.name}'`);
-  console.log('Data: ', data);
 
   githubApp.webhooks.on('installation.created', ({ payload }) => {
     const { installation, sender } = payload;
@@ -111,20 +110,20 @@ export async function createGitHubApp() {
     );
 
     // Run heavy work in the background so webhook acknowledgement is fast.
-    void runPullRequestAnalysis(
-      octokit as {
-        request: (
-          route: string,
-          params: Record<string, unknown>,
-        ) => Promise<{ data: Array<{ filename: string; patch?: string }> }>;
-      },
-      payload as PullRequestPayload,
-    ).catch((error: unknown) => {
-      console.error(
-        `[analysis:error] pr=${payload.pull_request.number}`,
-        error,
-      );
-    });
+    // void runPullRequestAnalysis(
+    //   octokit as {
+    //     request: (
+    //       route: string,
+    //       params: Record<string, unknown>,
+    //     ) => Promise<{ data: Array<{ filename: string; patch?: string }> }>;
+    //   },
+    //   payload as PullRequestPayload,
+    // ).catch((error: unknown) => {
+    //   console.error(
+    //     `[analysis:error] pr=${payload.pull_request.number}`,
+    //     error,
+    //   );
+    // });
   });
 
   githubApp.webhooks.onAny(({ id, name, payload }) => {
