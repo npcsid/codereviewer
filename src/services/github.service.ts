@@ -1,57 +1,10 @@
 import { App } from '@octokit/app';
 import { env } from '../config/env.js';
-import { generateText } from 'ai';
-
-type PullRequestPayload = {
-  action: string;
-  repository: { owner: { login: string }; name: string };
-  pull_request: { number: number; user: { login: string } };
-};
-
-async function runPullRequestAnalysis(
-  octokit: { request: (route: string, params: Record<string, unknown>) => Promise<{ data: Array<{ filename: string; patch?: string }> }> },
-  payload: PullRequestPayload,
-): Promise<void> {
-  const { pull_request, repository } = payload;
-  const owner = repository.owner.login;
-  const repo = repository.name;
-  const prNumber = pull_request.number;
-
-  console.log(
-    `[analysis:start] action=${payload.action} pr=${prNumber} repo=${owner}/${repo}`,
-  );
-
-  const { data: files } = await octokit.request(
-    'GET /repos/{owner}/{repo}/pulls/{pull_number}/files',
-    { owner, repo, pull_number: prNumber },
-  );
-
-  console.log(
-    `[analysis:files] pr=${prNumber} changed=${files.length}`,
-    files.map((f) => f.filename),
-  );
-
-  const diffText = files
-    .filter((f) => f.patch)
-    .map((f) => `File: ${f.filename}\n${f.patch}`)
-    .join('\n\n');
-
-  const prompt = `Review this PR diff and return:
-      - summary
-      - findings (severity, file, line, message, suggestion)
-      DIFF: ${diffText}`;
-
-  const { text } = await generateText({
-    model: 'openai/gpt-5',
-    prompt,
-    temperature: 0.1,
-    maxOutputTokens: 1200,
-    abortSignal: AbortSignal.timeout(25_000),
-  });
-
-  console.log(`[analysis:done] pr=${prNumber}`);
-  console.log(text);
-}
+import {
+  handlePullRequestEvent,
+  PullRequestPayload,
+  PullRequestEventType,
+} from './review.service.js';
 
 export async function createGitHubApp() {
   const githubApp = new App({
@@ -81,30 +34,20 @@ export async function createGitHubApp() {
     );
   });
 
-  githubApp.webhooks.on('pull_request', ({ payload }) => {
-    console.log('Generic top level PR webhook')
-    console.log(
-      `[pull_request] action=${payload.action} #${payload.pull_request.number}`,
-    );
-  });
 
-  githubApp.webhooks.on('push', ({ payload }) => {
-    console.log('PR push webhook')
-    console.log(
-      `[push] ${payload.repository.full_name} by ${payload.pusher.name}`,
-    );
-  });
-
-  githubApp.webhooks.on('pull_request.synchronize', ({ payload }) => {
+  githubApp.webhooks.on('pull_request.synchronize', ({ octokit, payload }) => {
     console.log('PR synchronize webhook')
-    console.log(
-      `[pull_request] action=${payload.action} #${payload.pull_request.number}`,
-    );
-  });
 
-  githubApp.webhooks.on('pull_request.edited', ({ payload }) => {
-    console.log('PR edited webhook')
-    console.log(`[pull_request] action=${payload.action} #${payload.pull_request.number}`);
+    void handlePullRequestEvent({
+      octokit,
+      payload: payload as PullRequestPayload,
+      event: PullRequestEventType.Synchronize,
+    }).catch((error: unknown) => {
+      console.error(
+        'Error while synchronizing PR',
+        error,
+      );
+    });
   });
 
   githubApp.webhooks.on('pull_request.opened', ({ octokit, payload }) => {
@@ -115,28 +58,16 @@ export async function createGitHubApp() {
     );
 
     // Run heavy work in the background so webhook acknowledgement is fast.
-    // void runPullRequestAnalysis(
-    //   octokit as {
-    //     request: (
-    //       route: string,
-    //       params: Record<string, unknown>,
-    //     ) => Promise<{ data: Array<{ filename: string; patch?: string }> }>;
-    //   },
-    //   payload as PullRequestPayload,
-    // ).catch((error: unknown) => {
-    //   console.error(
-    //     `[analysis:error] pr=${payload.pull_request.number}`,
-    //     error,
-    //   );
-    // });
-  });
-
-  githubApp.webhooks.onAny(({ id, name, payload }) => {
-    const action = typeof payload === 'object' && payload && 'action' in payload
-      ? (payload as { action?: string }).action
-      : undefined;
-
-    console.log(`[webhook] id=${id} name=${name} action=${action ?? 'n/a'}`);
+    void handlePullRequestEvent({
+      octokit,
+      payload: payload as PullRequestPayload,
+      event: PullRequestEventType.Opened,
+    }).catch((error: unknown) => {
+      console.error(
+        `[analysis:error] pr=${payload.pull_request.number}`,
+        error,
+      );
+    });
   });
 
   githubApp.webhooks.onError((error) => {
