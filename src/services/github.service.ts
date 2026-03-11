@@ -58,6 +58,7 @@ export async function createGitHubApp() {
     );
 
     console.log('random console for diff')
+    console.log('another random console for diff')
 
     // Run heavy work in the background so webhook acknowledgement is fast.
     void handlePullRequestEvent({
