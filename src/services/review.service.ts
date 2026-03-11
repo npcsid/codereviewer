@@ -57,6 +57,8 @@ export async function runPullRequestAnalysis(
       - summary
       - findings (severity, file, line, message, suggestion)
       DIFF: ${diffText}`;
+  
+  console.log('DIFFTEXT: ', diffText)
 
   const { text } = await generateTextFn({
     model: 'openai/gpt-5',
@@ -66,7 +68,7 @@ export async function runPullRequestAnalysis(
     abortSignal: AbortSignal.timeout(60_000),
   });
 
-  console.log(text);
+  console.log('LLM response text:',text);
 }
 
 export async function handlePullRequestEvent(input: {
