@@ -68,7 +68,7 @@ export async function runPullRequestAnalysis(
     abortSignal: AbortSignal.timeout(25_000),
   });
 
-  console.log(text);
+  console.log('data: ', text);
 }
 
 export async function handlePullRequestEvent(input: {
