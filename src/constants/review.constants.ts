@@ -3,6 +3,8 @@ export const REVIEW_MODEL = 'openai/gpt-5';
 export const REVIEW_TEMPERATURE = 0.1;
 export const REVIEW_MAX_OUTPUT_TOKENS = 3000;
 export const REVIEW_TIMEOUT_MS = 90_000;
+export const MIN_PR_TEXT_LENGTH = 1;
+export const REVIEW_UPDATE_PULL_ROUTE = 'PATCH /repos/{owner}/{repo}/pulls/{pull_number}';
 
 export enum ReviewSeverity {
   Low = 'low',
