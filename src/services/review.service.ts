@@ -125,6 +125,7 @@ export async function runPullRequestAnalysis(
   let reviewPayload: ReviewPayload;
   try {
     reviewPayload = parseReviewPayload(trimmedText);
+    console.log('PR Review: ', reviewPayload)
   } catch (error) {
     console.error(
       `${REVIEW_LOG_PARSE_ERROR_PREFIX} pr=${prNumber} sample=${trimmedText.slice(0, 300)}`,
