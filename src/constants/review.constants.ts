@@ -18,8 +18,11 @@ export const REVIEW_LOG_SKIP_PREFIX = '[analysis:skip]';
 export const REVIEW_LOG_DIFF_PREFIX = '[analysis:diff]';
 export const REVIEW_LOG_LLM_PREFIX = '[analysis:llm]';
 export const REVIEW_LOG_PARSE_ERROR_PREFIX = '[analysis:parse-error]';
-export const REVIEW_LOG_RESULT_PREFIX = '[analysis:result]';
-export const REVIEW_LOG_EVENT_PREFIX = '[review:event]';
+
+export enum PullRequestEventType {
+  Opened = 'pull_request.opened',
+  Synchronize = 'pull_request.synchronize',
+}
 
 export const REVIEW_PROMPT_TEMPLATE = `You are a senior code reviewer.
 Return ONLY valid JSON, no markdown, no code fences, no explanation.

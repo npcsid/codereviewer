@@ -15,8 +15,8 @@ import {
 import {
   handlePullRequestEvent,
   PullRequestPayload,
-  PullRequestEventType,
 } from './review.service.js';
+import { PullRequestEventType } from '../constants/review.constants.js';
 
 export async function createGitHubApp() {
   const githubApp = new App({

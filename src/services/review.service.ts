@@ -2,12 +2,8 @@ import { generateText } from 'ai';
 import {
   REVIEW_EMPTY_RESPONSE_PREFIX,
   REVIEW_FILES_ROUTE,
-  REVIEW_LOG_DIFF_PREFIX,
-  REVIEW_LOG_EVENT_PREFIX,
-  REVIEW_LOG_FILES_PREFIX,
   REVIEW_LOG_LLM_PREFIX,
   REVIEW_LOG_PARSE_ERROR_PREFIX,
-  REVIEW_LOG_RESULT_PREFIX,
   REVIEW_LOG_SKIP_PREFIX,
   REVIEW_MAX_OUTPUT_TOKENS,
   REVIEW_MODEL,
@@ -16,15 +12,21 @@ import {
   ReviewSeverity,
   REVIEW_TEMPERATURE,
   REVIEW_TIMEOUT_MS,
+  PullRequestEventType,
 } from '../constants/review.constants.js';
 
 type PullRequestFile = { filename: string; patch?: string };
+
+type PRResponse = {
+   body: string, title: string,
+   files: PullRequestFile[]
+}
 
 type OctokitLike = {
   request: (
     route: string,
     params: Record<string, unknown>,
-  ) => Promise<{ data: PullRequestFile[] }>;
+  ) => Promise<{ data: PRResponse }>;
 };
 
 export type PullRequestPayload = {
@@ -32,11 +34,6 @@ export type PullRequestPayload = {
   repository: { owner: { login: string }; name: string };
   pull_request: { number: number; user: { login: string } };
 };
-
-export enum PullRequestEventType {
-  Opened = 'pull_request.opened',
-  Synchronize = 'pull_request.synchronize',
-}
 
 type ReviewFinding = {
   severity: ReviewSeverity;
@@ -86,13 +83,17 @@ export async function runPullRequestAnalysis(
   const repo = repository.name;
   const prNumber = pull_request.number;
 
-  const { data: files } = await octokit.request(
+  const { data } = await octokit.request(
     REVIEW_FILES_ROUTE,
-    { owner, repo, pull_number: prNumber },
+    { owner, repo, pull_number: prNumber},
   );
 
+  // prNumber will be necessary for deduping PRs later on
 
-  const diffText = files
+  console.log('PR SUMMARY/DESCRIPTION: ', data.body)
+  console.log('PR TITLE: ', data.body)
+
+  const diffText = data.files
     .filter((f) => f.patch)
     .map((f) => `File: ${f.filename}\n${f.patch}`)
     .join('\n\n');
@@ -114,7 +115,7 @@ export async function runPullRequestAnalysis(
 
   const trimmedText = result.text.trim();
   console.log(
-    `${REVIEW_LOG_LLM_PREFIX} pr=${prNumber} textLength=${trimmedText.length} finishReason=${String(result.finishReason ?? 'n/a')} inputTokens=${result.usage?.inputTokens ?? 0} outputTokens=${result.usage?.outputTokens ?? 0} reasoningTokens=${result.usage?.reasoningTokens ?? 0}`,
+    `${REVIEW_LOG_LLM_PREFIX} pr=${prNumber} textLength=${trimmedText.length} finishReason=${String(result.finishReason ?? 'n/a')} inputTokens=${result.usage?.inputTokens ?? 0} outputTokens=${result.usage?.outputTokens ?? 0} reasoningTokens=${result.usage?.outputTokenDetails.reasoningTokens ?? 0}`,
   );
 
   if (!trimmedText) {
@@ -131,10 +132,6 @@ export async function runPullRequestAnalysis(
     );
     throw error;
   }
-
-  console.log(
-    `${REVIEW_LOG_RESULT_PREFIX} pr=${prNumber} summaryCount=${reviewPayload.summary.length} findingsCount=${reviewPayload.findings.length}`,
-  );
 }
 
 export async function handlePullRequestEvent(input: {
@@ -142,10 +139,7 @@ export async function handlePullRequestEvent(input: {
   payload: PullRequestPayload;
   event: PullRequestEventType;
 }): Promise<void> {
-  const { octokit, payload, event } = input;
-  console.log(
-    `${REVIEW_LOG_EVENT_PREFIX} ${event} action=${payload.action} #${payload.pull_request.number}`,
-  );
+  const { octokit, payload } = input;
 
   await runPullRequestAnalysis(octokit, payload);
 }
