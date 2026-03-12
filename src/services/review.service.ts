@@ -17,22 +17,22 @@ import {
 
 type PullRequestFile = { filename: string; patch?: string };
 
-type PRResponse = {
-   body: string, title: string,
-   files: PullRequestFile[]
-}
-
 type OctokitLike = {
   request: (
     route: string,
     params: Record<string, unknown>,
-  ) => Promise<{ data: PRResponse }>;
+  ) => Promise<{ data: PullRequestFile[] }>;
 };
 
 export type PullRequestPayload = {
   action: string;
   repository: { owner: { login: string }; name: string };
-  pull_request: { number: number; user: { login: string } };
+  pull_request: {
+    number: number;
+    user: { login: string };
+    title?: string;
+    body?: string | null;
+  };
 };
 
 type ReviewFinding = {
@@ -88,14 +88,14 @@ export async function runPullRequestAnalysis(
     { owner, repo, pull_number: prNumber},
   );
 
-  // prNumber will be necessary for deduping PRs later on
+  const prTitle = pull_request.title ?? '';
+  const prBody = pull_request.body ?? '';
 
-  console.log('dataa body: ', data)
+  console.log(
+    `[analysis:pr] pr=${prNumber} titleLength=${prTitle.length} bodyLength=${prBody.length}`,
+  );
 
-  console.log('PR SUMMARY/DESCRIPTION: ', data.body)
-  console.log('PR TITLE: ', data.body)
-
-  const diffText = data.files
+  const diffText = data
     .filter((f) => f.patch)
     .map((f) => `File: ${f.filename}\n${f.patch}`)
     .join('\n\n');
