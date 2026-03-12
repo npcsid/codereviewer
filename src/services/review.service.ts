@@ -97,6 +97,8 @@ function buildBoundedDiff(files: PullRequestFile[]): {
   };
 }
 
+console.log('hello')
+
 export async function runPullRequestAnalysis(
   octokit: OctokitLike,
   payload: PullRequestPayload,
