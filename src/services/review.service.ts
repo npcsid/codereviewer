@@ -1,5 +1,7 @@
 import { generateText } from 'ai';
 import {
+  MIN_PR_TEXT_LENGTH,
+  PullRequestEventType,
   REVIEW_EMPTY_RESPONSE_PREFIX,
   REVIEW_FILES_ROUTE,
   REVIEW_LOG_LLM_PREFIX,
@@ -12,7 +14,7 @@ import {
   ReviewSeverity,
   REVIEW_TEMPERATURE,
   REVIEW_TIMEOUT_MS,
-  PullRequestEventType,
+  REVIEW_UPDATE_PULL_ROUTE,
 } from '../constants/review.constants.js';
 
 type PullRequestFile = { filename: string; patch?: string };
@@ -21,7 +23,7 @@ type OctokitLike = {
   request: (
     route: string,
     params: Record<string, unknown>,
-  ) => Promise<{ data: PullRequestFile[] }>;
+  ) => Promise<{ data: unknown }>;
 };
 
 export type PullRequestPayload = {
@@ -46,6 +48,42 @@ type ReviewFinding = {
 type ReviewPayload = {
   summary: string[];
   findings: ReviewFinding[];
+};
+
+const hasMeaningfulText = (value: string | null | undefined): boolean =>
+  (value?.trim().length ?? 0) > MIN_PR_TEXT_LENGTH;
+
+const updatePRSummary = async (input: {
+  octokit: OctokitLike;
+  owner: string;
+  repo: string;
+  prNumber: number;
+  body: string;
+  summary: string[];
+}): Promise<void> => {
+  const { octokit, owner, repo, prNumber, body, summary } = input;
+
+  const bodyExists = hasMeaningfulText(body);
+  if (bodyExists) {
+    return;
+  }
+
+  const generatedBody = summary.length
+    ? summary.map((line) => `- ${line}`).join('\n')
+    : 'Automated PR summary not available.';
+
+  const patchPayload: Record<string, unknown> = {
+    owner,
+    repo,
+    pull_number: prNumber,
+    body: generatedBody,
+  };
+
+  try {
+    await octokit.request(REVIEW_UPDATE_PULL_ROUTE, patchPayload);
+  } catch (error) {
+    console.error('Error updating PR:', error);
+  }
 };
 
 const parseReviewPayload = (raw: string): ReviewPayload => {
@@ -77,7 +115,7 @@ const parseReviewPayload = (raw: string): ReviewPayload => {
 export async function runPullRequestAnalysis(
   octokit: OctokitLike,
   payload: PullRequestPayload,
-): Promise<void> {
+): Promise<ReviewPayload | null> {
   const { pull_request, repository } = payload;
   const owner = repository.owner.login;
   const repo = repository.name;
@@ -87,6 +125,7 @@ export async function runPullRequestAnalysis(
     REVIEW_FILES_ROUTE,
     { owner, repo, pull_number: prNumber},
   );
+  const files = Array.isArray(data) ? (data as PullRequestFile[]) : [];
 
   const prTitle = pull_request.title ?? '';
   const prBody = pull_request.body ?? '';
@@ -95,14 +134,14 @@ export async function runPullRequestAnalysis(
     `[analysis:pr] pr=${prNumber} titleLength=${prTitle.length} bodyLength=${prBody.length}`,
   );
 
-  const diffText = data
+  const diffText = files
     .filter((f) => f.patch)
     .map((f) => `File: ${f.filename}\n${f.patch}`)
     .join('\n\n');
 
   if (!diffText.trim()) {
     console.warn(`${REVIEW_LOG_SKIP_PREFIX} pr=${prNumber} no textual patch content`);
-    return;
+    return null;
   }
 
   const prompt = `${REVIEW_PROMPT_TEMPLATE}${diffText}`;
@@ -124,10 +163,18 @@ export async function runPullRequestAnalysis(
     throw new Error(`${REVIEW_EMPTY_RESPONSE_PREFIX}${prNumber}`);
   }
 
-  let reviewPayload: ReviewPayload;
+  let reviewPayload = null
   try {
     reviewPayload = parseReviewPayload(trimmedText);
-    console.log('PR Review: ', reviewPayload)
+    await updatePRSummary({
+      octokit,
+      owner,
+      repo,
+      prNumber,
+      body: prBody,
+      summary: reviewPayload.summary,
+    });
+    return reviewPayload
   } catch (error) {
     console.error(
       `${REVIEW_LOG_PARSE_ERROR_PREFIX} pr=${prNumber} sample=${trimmedText.slice(0, 300)}`,
@@ -141,8 +188,9 @@ export async function handlePullRequestEvent(input: {
   octokit: OctokitLike;
   payload: PullRequestPayload;
   event: PullRequestEventType;
-}): Promise<void> {
+}): Promise<ReviewPayload | null> {
   const { octokit, payload } = input;
 
-  await runPullRequestAnalysis(octokit, payload);
+  const reviewData = await runPullRequestAnalysis(octokit, payload);
+  return reviewData
 }
