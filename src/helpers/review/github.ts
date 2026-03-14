@@ -1,7 +1,9 @@
 import {
+  REVIEW_CREATE_ISSUE_COMMENT_ROUTE,
   MIN_PR_TEXT_LENGTH,
   REVIEW_CREATE_REVIEW_ROUTE,
   REVIEW_EVENT_COMMENT,
+  REVIEW_LOG_FAILURE_COMMENT_PREFIX,
   REVIEW_GET_PULL_ROUTE,
   REVIEW_LOG_REVIEW_SUBMIT_PREFIX,
   REVIEW_UPDATE_PULL_ROUTE,
@@ -43,7 +45,7 @@ export const updatePRSummary = async (input: {
   };
 
   try {
-    await octokit.request(REVIEW_UPDATE_PULL_ROUTE, patchPayload);
+    await octokit.request(`PATCH ${REVIEW_UPDATE_PULL_ROUTE}`, patchPayload);
   } catch (error) {
     console.error('Error updating PR:', error);
   }
@@ -55,7 +57,7 @@ const buildReviewBody = (reviewPayload: ReviewPayload): string => {
     : ' No summary provided.';
   const findings = reviewPayload.reviewFindings.length
     ? reviewPayload.reviewFindings.map((finding) =>
-      ` [${finding.severity}] ${finding.file}:${finding.line ?? 'n/a'}  ${finding.message}`,
+      `- ${finding.label}: ${finding.file}:${finding.line ?? 'n/a'} ${finding.message}`,
     ).join('\n')
     : ' No review findings.';
 
@@ -74,7 +76,7 @@ const toInlineComments = (reviewFindings: ReviewFinding[]): ReviewComment[] =>
       // In GitHub PR diffs, RIGHT means the changed/new code side (the PR head revision).
       // Bots typically comment on RIGHT because findings target code introduced/modified by the PR.
       side: 'RIGHT' as const,
-      body: `[${finding.severity}] ${finding.message}\n\nSuggestion: ${finding.suggestion}`,
+      body: `${finding.label}: ${finding.message}\n\nSuggestion: ${finding.suggestion}`,
     }));
 
 export const submitPullRequestReview = async (input: {
@@ -86,7 +88,7 @@ export const submitPullRequestReview = async (input: {
 }): Promise<void> => {
   const { octokit, owner, repo, prNumber, reviewPayload } = input;
 
-  const { data: prData } = await octokit.request(REVIEW_GET_PULL_ROUTE, {
+  const { data: prData } = await octokit.request(`GET ${REVIEW_GET_PULL_ROUTE}`, {
     owner,
     repo,
     pull_number: prNumber,
@@ -107,7 +109,7 @@ export const submitPullRequestReview = async (input: {
   const event = REVIEW_EVENT_COMMENT;
 
   try {
-    await octokit.request(REVIEW_CREATE_REVIEW_ROUTE, {
+    await octokit.request(`POST ${REVIEW_CREATE_REVIEW_ROUTE}`, {
       owner,
       repo,
       pull_number: prNumber,
@@ -125,7 +127,7 @@ export const submitPullRequestReview = async (input: {
       `${REVIEW_LOG_REVIEW_SUBMIT_PREFIX} pr=${prNumber} inline_failed=true fallback=summary_only`,
       error,
     );
-    await octokit.request(REVIEW_CREATE_REVIEW_ROUTE, {
+    await octokit.request(`POST ${REVIEW_CREATE_REVIEW_ROUTE}`, {
       owner,
       repo,
       pull_number: prNumber,
@@ -134,5 +136,30 @@ export const submitPullRequestReview = async (input: {
       body,
       comments: [],
     });
+  }
+};
+
+export const submitReviewFailureComment = async (input: {
+  octokit: OctokitLike;
+  owner: string;
+  repo: string;
+  prNumber: number;
+  body: string;
+}): Promise<void> => {
+  const { octokit, owner, repo, prNumber, body } = input;
+
+  try {
+    await octokit.request(`POST ${REVIEW_CREATE_ISSUE_COMMENT_ROUTE}`, {
+      owner,
+      repo,
+      issue_number: prNumber,
+      body,
+    });
+    console.log(`${REVIEW_LOG_FAILURE_COMMENT_PREFIX} pr=${prNumber} posted=true`);
+  } catch (error) {
+    console.error(
+      `${REVIEW_LOG_FAILURE_COMMENT_PREFIX} pr=${prNumber} posted=false`,
+      error,
+    );
   }
 };

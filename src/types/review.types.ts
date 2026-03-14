@@ -1,4 +1,4 @@
-import { ReviewSeverity } from '../constants/review.constants.js';
+import { ReviewLabel, ReviewSeverity } from '../constants/review.constants.js';
 
 export type PullRequestFile = { filename: string; patch?: string };
 
@@ -21,6 +21,7 @@ export type PullRequestPayload = {
 };
 
 export type ReviewFinding = {
+  label: ReviewLabel;
   severity: ReviewSeverity;
   file: string;
   line: number | null;

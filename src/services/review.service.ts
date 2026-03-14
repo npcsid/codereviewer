@@ -3,6 +3,7 @@ import {
   PullRequestEventType,
   REVIEW_EMPTY_RESPONSE_PREFIX,
   REVIEW_FILES_ROUTE,
+  REVIEW_GENERIC_FAILURE_COMMENT,
   REVIEW_LOG_LLM_PREFIX,
   REVIEW_LOG_PARSE_ERROR_PREFIX,
   REVIEW_LOG_SKIP_PREFIX,
@@ -10,10 +11,12 @@ import {
   REVIEW_MODEL,
   REVIEW_PROMPT_TEMPLATE,
   REVIEW_TEMPERATURE,
+  REVIEW_TIMEOUT_FAILURE_COMMENT,
   REVIEW_TIMEOUT_MS,
 } from '../constants/review.constants.js';
 import {
   submitPullRequestReview,
+  submitReviewFailureComment,
   updatePRSummary,
 } from '../helpers/review/github.js';
 import { parseReviewPayload } from '../helpers/review/parser.js';
@@ -35,7 +38,7 @@ export async function runPullRequestAnalysis(
   const repo = repository.name;
   const prNumber = pull_request.number;
 
-  const { data } = await octokit.request(REVIEW_FILES_ROUTE, {
+  const { data } = await octokit.request(`GET ${REVIEW_FILES_ROUTE}`, {
     owner,
     repo,
     pull_number: prNumber,
@@ -109,12 +112,41 @@ export async function runPullRequestAnalysis(
   return reviewPayload;
 }
 
+const isTimeoutError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    message.includes('aborted due to timeout') ||
+    message.includes('TimeoutError') ||
+    message.includes('timed out')
+  );
+};
+
 export async function handlePullRequestEvent(input: {
   octokit: OctokitLike;
   payload: PullRequestPayload;
   event: PullRequestEventType;
 }): Promise<ReviewPayload | null> {
   const { octokit, payload } = input;
+  const owner = payload.repository.owner.login;
+  const repo = payload.repository.name;
+  const prNumber = payload.pull_request.number;
 
-  return runPullRequestAnalysis(octokit, payload);
+  try {
+    return await runPullRequestAnalysis(octokit, payload);
+  } catch (error) {
+    console.error(`[analysis:error] pr=${prNumber}`, error);
+
+    await submitReviewFailureComment({
+      octokit,
+      owner,
+      repo,
+      prNumber,
+      body: isTimeoutError(error)
+        ? REVIEW_TIMEOUT_FAILURE_COMMENT
+        : REVIEW_GENERIC_FAILURE_COMMENT,
+    });
+
+    return null;
+  }
 }
